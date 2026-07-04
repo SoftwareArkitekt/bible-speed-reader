@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bible Speed Reader</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #111111;
+      --panel: #f0f0f0;
+      --border: #cccccc;
+      --accent: #e74c3c;
+      --btn: #e0e0e0;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: Georgia, 'Times New Roman', serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Settings toggle ── */
+    #settings-toggle {
+      padding: 7px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 13px;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #settings-toggle:hover { opacity: 0.85; }
+
+    /* ── Settings panel ── */
+    #settings-panel {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px 14px;
+      display: none;
+      flex-wrap: wrap;
+      gap: 14px 22px;
+      overflow-y: auto;
+      max-height: 280px;
+    }
+    #settings-panel.open { display: flex; }
+
+    .sg { display: flex; flex-direction: column; gap: 5px; }
+    .sg > label {
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      opacity: 0.6;
+    }
+    .sg .row { display: flex; align-items: center; gap: 8px; }
+    .val-lbl { font-size: 13px; font-weight: bold; min-width: 36px; }
+
+    input[type="range"] {
+      width: 130px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+    input[type="color"] {
+      width: 48px;
+      height: 28px;
+      border: 1px solid var(--border);
+      padding: 2px;
+      cursor: pointer;
+      background: var(--bg);
+      border-radius: 3px;
+    }
+    select, .go-btn, .theme-btn {
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--fg);
+      padding: 4px 8px;
+      font-size: 13px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    select:disabled { opacity: 0.45; }
+    .theme-btn {
+      background: var(--btn);
+      padding: 4px 10px;
+    }
+    .theme-btn:hover { opacity: 0.8; }
+    .theme-row { display: flex; gap: 6px; }
+    input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    /* ── Location bar ── */
+    #loc-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    #file-label {
+      padding: 5px 12px;
+      background: #2980b9;
+      color: #fff;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #file-label:hover { background: #3498db; }
+    #file-input { display: none; }
+    #loc-bar select { font-size: 13px; }
+    .go-btn {
+      padding: 5px 14px;
+      background: var(--btn);
+    }
+    .go-btn:hover { opacity: 0.8; }
+
+    /* ── Reader ── */
+    #reader {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 20px 24px;
+      min-height: 0;
+    }
+
+    #no-file-msg {
+      font-size: 18px;
+      opacity: 0.35;
+      text-align: center;
+    }
+
+    #verse-label {
+      font-size: 20px;
+      opacity: 0.5;
+      letter-spacing: 0.4px;
+    }
+
+    /* Word display area */
+    #word-box {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Courier New', Courier, monospace;
+      position: relative;
+    }
+
+    /* ORP layout: left | pivot | right */
+    #wc-orp {
+      display: flex;
+      align-items: baseline;
+      width: 100%;
+    }
+    #w-left {
+      flex: 1;
+      text-align: right;
+      overflow: hidden;
+    }
+    #w-orp {
+      flex: 0 0 0.62em;
+      text-align: center;
+    }
+    #w-right {
+      flex: 1;
+      text-align: left;
+      overflow: hidden;
+    }
+
+    /* ORP pivot guide line */
+    #pivot-line {
+      position: absolute;
+      top: 5%; bottom: 5%;
+      left: calc(50% - 0.31em);
+      width: 2px;
+      background: var(--accent);
+      opacity: 0.18;
+      border-radius: 1px;
+      pointer-events: none;
+    }
+
+    /* Simple alignment layout */
+    #wc-simple {
+      display: none;
+      width: 100%;
+    }
+    #word-box.align-front  #wc-simple { justify-content: flex-start; }
+    #word-box.align-center #wc-simple { justify-content: center; }
+    #word-box.align-rear   #wc-simple { justify-content: flex-end; }
+    #w-full { display: inline; }
+
+    /* Progress */
+    #progress-wrap {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    #progress-track {
+      width: 100%;
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+    }
+    #progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      pointer-events: none;
+    }
+    #progress-info { font-size: 11px; opacity: 0.45; }
+
+    /* ── Controls ── */
+    #controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+      flex-wrap: wrap;
+    }
+    .ctrl {
+      padding: 9px 16px;
+      font-size: 15px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--btn);
+      color: var(--fg);
+      border-radius: 5px;
+      line-height: 1;
+    }
+    .ctrl:hover { opacity: 0.8; }
+    #play-btn {
+      background: #27ae60;
+      color: #fff;
+      border-color: #1e8449;
+      font-size: 17px;
+      padding: 9px 22px;
+    }
+    #play-btn.playing {
+      background: #e67e22;
+      border-color: #ca6f1e;
+    }
+    #wpm-live {
+      font-size: 13px;
+      font-weight: bold;
+      opacity: 0.6;
+      min-width: 68px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Settings toggle bar -->
+<div id="settings-toggle" onclick="toggleSettings()">
+  <span>&#9881;</span>
+  <span>Settings</span>
+  <span id="tog-arrow">&#9660;</span>
+</div>
+
+<!-- Settings panel -->
+<div id="settings-panel">
+
+  <div class="sg">
+    <label>Theme</label>
+    <div class="theme-row">
+      <button class="theme-btn" onclick="applyTheme('light')">Light</button>
+      <button class="theme-btn" onclick="applyTheme('dark')">Dark</button>
+      <button class="theme-btn" onclick="applyTheme('sepia')">Sepia</button>
+    </div>
+  </div>
+
+  <div class="sg">
+    <label>Background</label>
+    <input type="color" id="bg-color" value="#ffffff" oninput="onColorsChange()">
+  </div>
+
+  <div class="sg">
+    <label>Text Color</label>
+    <input type="color" id="fg-color" value="#111111" oninput="onColorsChange()">
+  </div>
+
+  <div class="sg">
+    <label>ORP Highlight Color</label>
+    <input type="color" id="orp-color" value="#e74c3c" oninput="onOrpColorChange()">
+  </div>
+
+  <div class="sg">
+    <label>Font Size</label>
+    <div class="row">
+      <input type="range" id="font-size" min="24" max="96" value="76" step="2"
+             oninput="onFontSizeChange(+this.value)">
+      <span class="val-lbl" id="fs-lbl">48px</span>
+    </div>
+  </div>
+
+  <div class="sg">
+    <label>Speed (WPM)</label>
+    <div class="row">
+      <input type="range" id="wpm" min="100" max="800" value="400" step="25"
+             oninput="onWPMChange(+this.value)">
+      <span class="val-lbl" id="wpm-lbl">300</span>
+    </div>
+  </div>
+
+  <div class="sg">
+    <label>Word Alignment</label>
+    <select id="alignment" onchange="onAlignmentChange()">
+      <option value="orp" selected>ORP (Optimal)</option>
+      <option value="front">Front-aligned</option>
+      <option value="center">Center-aligned</option>
+      <option value="rear">Rear-aligned</option>
+    </select>
+  </div>
+
+  <div class="sg">
+    <label>Highlight ORP Letter</label>
+    <div class="row">
+      <input type="checkbox" id="highlight-orp" checked onchange="onHighlightChange()">
+      <span style="font-size:13px">Enabled</span>
+    </div>
+  </div>
+
+  <div class="sg">
+    <label>Complexity Delay</label>
+    <div class="row">
+      <input type="range" id="complexity" min="0" max="1" value="0.6" step="0.05"
+             oninput="onComplexityChange(+this.value)">
+      <span class="val-lbl" id="cx-lbl">0.3</span>
+    </div>
+  </div>
+
+  <div class="sg">
+    <label>Proper Name Delay</label>
+    <div class="row">
+      <input type="range" id="proper-delay" min="0" max="1" value="0.6" step="0.05"
+             oninput="onProperChange(+this.value)">
+      <span class="val-lbl" id="pn-lbl">0.3</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Location bar -->
+<div id="loc-bar">
+  <label id="file-label" for="file-input">&#128214; Load Bible</label>
+  <input type="file" id="file-input" accept=".json" onchange="onFileLoad(event)">
+  <select id="book-sel" onchange="onBookChange()" disabled>
+    <option value="">Book</option>
+  </select>
+  <select id="ch-sel" onchange="onChapterChange()" disabled>
+    <option value="">Ch</option>
+  </select>
+  <select id="vs-sel" disabled>
+    <option value="">Vs</option>
+  </select>
+  <button class="go-btn" onclick="onGoClick()">Go &#9654;</button>
+  <span id="loaded-file" style="margin-left:auto; font-size:12px; opacity:0.5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;"></span>
+</div>
+
+<!-- Reader -->
+<div id="reader">
+  <div id="no-file-msg">Load a Bible JSON file to begin speed reading</div>
+
+  <div id="verse-label" style="display:none"></div>
+
+  <div id="word-box" style="display:none">
+    <div id="pivot-line"></div>
+    <!-- ORP layout -->
+    <div id="wc-orp">
+      <span id="w-left"></span><span id="w-orp"></span><span id="w-right"></span>
+    </div>
+    <!-- Front / center / rear layout -->
+    <div id="wc-simple">
+      <span id="w-full"></span>
+    </div>
+  </div>
+
+  <div id="progress-wrap" style="display:none">
+    <div id="progress-track" onclick="onProgressClick(event)">
+      <div id="progress-fill" style="width:0%"></div>
+    </div>
+    <div id="progress-info">Word 0 of 0</div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <button class="ctrl" onclick="stepBy(-1)" title="Previous word (Left arrow)">&#9664;</button>
+  <button class="ctrl" onclick="stepBy(-10)" title="Back 10 words">&#9668;&#9668;</button>
+  <button class="ctrl" id="play-btn" onclick="togglePlay()" title="Play / Pause (Space)">&#9654; Play</button>
+  <button class="ctrl" onclick="stepBy(10)" title="Forward 10 words">&#9658;&#9658;</button>
+  <button class="ctrl" onclick="stepBy(1)" title="Next word (Right arrow)">&#9654;</button>
+  <button class="ctrl" onclick="resetToStart()" title="Return to first word (R)">&#8617; Reset</button>
+  <span id="wpm-live">300 WPM</span>
+</div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+const S = {
+  wpm: 400,
+  fontSize: 76,
+  alignment: 'orp',
+  highlightOrp: true,
+  complexityFactor: 0.6,
+  properFactor: 0.6,
+  bgColor: '#ffffff',
+  fgColor: '#111111',
+  orpColor: '#e74c3c',
+};
+
+let bible = null;
+let words = [];
+let bookRanges = {};  // { bookName: { start, end } } — end is inclusive last index
+let idx = 0;
+let playing = false;
+let timer = null;
+
+// ─────────────────────────────────────────────
+// Persistence — IndexedDB (file) + localStorage (progress)
+// ─────────────────────────────────────────────
+const IDB_NAME    = 'bible-speed-reader';
+const IDB_STORE   = 'data';
+const IDB_FILE_KEY = 'bsr_file';
+const LS_PROGRESS = 'bsr_progress';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+    req.onsuccess  = e => resolve(e.target.result);
+    req.onerror    = e => reject(e.target.error);
+  });
+}
+
+async function dbPut(key, value) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  });
+}
+
+async function dbGet(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+function saveProgress() {
+  if (!words.length) return;
+  const pos = {
+    startBook: document.getElementById('book-sel').value,
+    startCh:   document.getElementById('ch-sel').value,
+    startVs:   document.getElementById('vs-sel').value,
+    idx,
+  };
+  try { localStorage.setItem(LS_PROGRESS, JSON.stringify(pos)); } catch (_) {}
+}
+
+async function restoreSession() {
+  let saved;
+  try { saved = await dbGet(IDB_FILE_KEY); } catch (_) { return; }
+  if (!saved) return;
+
+  bible = saved.json;
+  document.getElementById('loaded-file').textContent = saved.name;
+
+  const prog = (() => {
+    try { return JSON.parse(localStorage.getItem(LS_PROGRESS) || 'null'); } catch (_) { return null; }
+  })();
+
+  initBible(prog);
+}
+
+async function persistFile(name, jsonObj) {
+  try { await dbPut(IDB_FILE_KEY, { name, json: jsonObj }); } catch (_) {}
+}
+
+// ─────────────────────────────────────────────
+// File loading
+// ─────────────────────────────────────────────
+function onFileLoad(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('loaded-file').textContent = file.name;
+  const fr = new FileReader();
+  fr.onload = ev => {
+    try {
+      bible = JSON.parse(ev.target.result);
+      persistFile(file.name, bible);
+      // Clear saved progress when a new file is loaded
+      try { localStorage.removeItem(LS_PROGRESS); } catch (_) {}
+      initBible(null);
+    } catch (err) {
+      alert('Could not parse JSON: ' + err.message);
+    }
+  };
+  fr.readAsText(file);
+}
+
+// restore: { startBook, startCh, startVs, idx } or null
+function initBible(restore) {
+  const bookSel = document.getElementById('book-sel');
+  bookSel.innerHTML = '';
+  for (const b of Object.keys(bible)) {
+    const o = document.createElement('option');
+    o.value = o.textContent = b;
+    bookSel.appendChild(o);
+  }
+  bookSel.disabled = false;
+
+  if (restore && bible[restore.startBook]) {
+    bookSel.value = restore.startBook;
+    populateChapters();
+    const chSel = document.getElementById('ch-sel');
+    if (bible[restore.startBook][restore.startCh]) {
+      chSel.value = restore.startCh;
+      populateVerses();
+      const vsSel = document.getElementById('vs-sel');
+      if (bible[restore.startBook][restore.startCh][restore.startVs]) {
+        vsSel.value = restore.startVs;
+      }
+    }
+  } else {
+    populateChapters();
+  }
+
+  buildWordList();
+
+  if (restore && restore.idx > 0 && restore.idx < words.length) {
+    idx = restore.idx;
+  }
+
+  showUI();
+}
+
+function populateChapters() {
+  const book = document.getElementById('book-sel').value;
+  if (!book || !bible[book]) return;
+  const sel = document.getElementById('ch-sel');
+  sel.innerHTML = '';
+  for (const c of sortedKeys(bible[book])) {
+    const o = document.createElement('option');
+    o.value = o.textContent = c;
+    sel.appendChild(o);
+  }
+  sel.disabled = false;
+  populateVerses();
+}
+
+function populateVerses() {
+  const book = document.getElementById('book-sel').value;
+  const ch   = document.getElementById('ch-sel').value;
+  if (!book || !ch || !bible[book]?.[ch]) return;
+  const sel = document.getElementById('vs-sel');
+  sel.innerHTML = '';
+  for (const v of sortedKeys(bible[book][ch])) {
+    const o = document.createElement('option');
+    o.value = o.textContent = v;
+    sel.appendChild(o);
+  }
+  sel.disabled = false;
+}
+
+function onBookChange()    { populateChapters(); }
+function onChapterChange() { populateVerses(); }
+function onGoClick()       { stop(); buildWordList(); renderWord(); }
+
+function sortedKeys(obj) {
+  return Object.keys(obj).sort((a, b) => +a - +b || a.localeCompare(b));
+}
+
+// ─────────────────────────────────────────────
+// Word list
+// ─────────────────────────────────────────────
+function buildWordList() {
+  words = [];
+  bookRanges = {};
+  const startBook = document.getElementById('book-sel').value;
+  const startCh   = document.getElementById('ch-sel').value;
+  const startVs   = document.getElementById('vs-sel').value;
+  if (!bible || !startBook) return;
+
+  let active = false;
+  for (const book of Object.keys(bible)) {
+    if (!active && book !== startBook) continue;
+    const bookStart = words.length;
+    for (const ch of sortedKeys(bible[book])) {
+      if (!active && book === startBook && +ch < +startCh) continue;
+      for (const vs of sortedKeys(bible[book][ch])) {
+        if (!active && book === startBook && ch === startCh && +vs < +startVs) continue;
+        active = true;
+        parseVerse(bible[book][ch][vs], book, ch, vs);
+      }
+    }
+    if (words.length > bookStart) {
+      bookRanges[book] = { start: bookStart, end: words.length - 1 };
+    }
+  }
+  idx = 0;
+}
+
+function parseVerse(text, book, ch, vs) {
+  const raw = text.trim().split(/\s+/);
+  let prevEnded = true;
+  for (const w of raw) {
+    if (!w) continue;
+    const clean = w.replace(/[^a-zA-Z'-]/g, '');
+    if (clean.length === 0) continue;
+    words.push({ raw: w, clean, book, ch, vs, proper: isProperNoun(clean, prevEnded) });
+    prevEnded = /[.!?]['""“”‘’]?$/.test(w);
+  }
+}
+
+function isProperNoun(clean, isSentenceStart) {
+  if (clean.length < 2) return false;
+  return !isSentenceStart && /^[A-Z]/.test(clean);
+}
+
+// ─────────────────────────────────────────────
+// ORP
+// ─────────────────────────────────────────────
+function orpIdx(clean) {
+  const n = clean.length;
+  if (n <= 3) return 0;
+  if (n <= 5) return 1;
+  if (n <= 9) return 2;
+  return 3;
+}
+
+function splitORP(raw, clean) {
+  const target = orpIdx(clean);
+  let count = 0;
+  for (let i = 0; i < raw.length; i++) {
+    if (/[a-zA-Z'-]/.test(raw[i])) {
+      if (count === target) {
+        return { left: raw.slice(0, i), orp: raw[i] || '', right: raw.slice(i + 1) };
+      }
+      count++;
+    }
+  }
+  return { left: raw.slice(0, -1), orp: raw.slice(-1), right: '' };
+}
+
+// ─────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────
+function showUI() {
+  document.getElementById('no-file-msg').style.display = 'none';
+  document.getElementById('verse-label').style.display = '';
+  document.getElementById('word-box').style.display = '';
+  document.getElementById('progress-wrap').style.display = '';
+  renderWord();
+}
+
+function renderWord() {
+  if (!words.length) return;
+  const e = words[idx];
+  const { raw, clean } = e;
+
+  document.getElementById('verse-label').textContent =
+    e.book + '  ' + e.ch + ':' + e.vs;
+
+  const box = document.getElementById('word-box');
+  const orp = document.getElementById('wc-orp');
+  const sim = document.getElementById('wc-simple');
+  const piv = document.getElementById('pivot-line');
+
+  if (S.alignment === 'orp') {
+    box.style.justifyContent = 'center';
+    orp.style.display = 'flex';
+    sim.style.display = 'none';
+    piv.style.display = '';
+
+    const { left, orp: orpCh, right } = splitORP(raw, clean);
+    document.getElementById('w-left').textContent  = left;
+    document.getElementById('w-orp').textContent   = orpCh;
+    document.getElementById('w-right').textContent = right;
+    document.getElementById('w-orp').style.color   =
+      S.highlightOrp ? S.orpColor : 'inherit';
+  } else {
+    orp.style.display = 'none';
+    sim.style.display = 'flex';
+    piv.style.display = 'none';
+
+    const justifyMap = { front: 'flex-start', center: 'center', rear: 'flex-end' };
+    sim.style.justifyContent = justifyMap[S.alignment] || 'center';
+    document.getElementById('w-full').textContent = raw;
+  }
+
+  updateProgress();
+  saveProgress();
+}
+
+function updateProgress() {
+  if (!words.length) return;
+  const book = words[idx].book;
+  const range = bookRanges[book];
+  const span = range ? (range.end - range.start) : 0;
+  const pct = span > 0 ? ((idx - range.start) / span) * 100 : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  const bookWord = idx - (range ? range.start : 0) + 1;
+  const bookTotal = span + 1;
+  document.getElementById('progress-info').textContent =
+    book + ' — word ' + bookWord + ' of ' + bookTotal;
+}
+
+// ─────────────────────────────────────────────
+// Timing
+// ─────────────────────────────────────────────
+function wordDelay(e) {
+  const base = 60000 / S.wpm;
+  const n = e.clean.length;
+
+  let cx = 1.0;
+  if (S.complexityFactor > 0) {
+    if      (n >= 9) cx += S.complexityFactor * 0.6;
+    else if (n >= 5) cx += S.complexityFactor * 0.3;
+  }
+
+  let px = 1.0;
+  if (e.proper && S.properFactor > 0) px += S.properFactor * 0.5;
+
+  return base * cx * px;
+}
+
+// ─────────────────────────────────────────────
+// Playback
+// ─────────────────────────────────────────────
+function scheduleNext() {
+  if (!playing) return;
+  if (idx >= words.length - 1) { stop(); return; }
+  timer = setTimeout(() => {
+    if (!playing) return;
+    idx++;
+    renderWord();
+    scheduleNext();
+  }, wordDelay(words[idx]));
+}
+
+function togglePlay() {
+  if (playing) pause(); else play();
+}
+
+function play() {
+  if (!words.length) return;
+  playing = true;
+  const btn = document.getElementById('play-btn');
+  btn.innerHTML = '&#9646;&#9646; Pause';
+  btn.classList.add('playing');
+  renderWord();
+  scheduleNext();
+}
+
+function pause() {
+  playing = false;
+  clearTimeout(timer);
+  const btn = document.getElementById('play-btn');
+  btn.innerHTML = '&#9654; Play';
+  btn.classList.remove('playing');
+}
+
+function stop() { pause(); }
+
+function stepBy(delta) {
+  stop();
+  idx = Math.max(0, Math.min(words.length - 1, idx + delta));
+  if (words.length) renderWord();
+}
+
+function resetToStart() {
+  stop();
+  idx = 0;
+  if (words.length) renderWord();
+}
+
+function onProgressClick(e) {
+  if (!words.length) return;
+  const rect = document.getElementById('progress-track').getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  stop();
+  idx = Math.round(frac * (words.length - 1));
+  renderWord();
+}
+
+// ─────────────────────────────────────────────
+// Settings
+// ─────────────────────────────────────────────
+function toggleSettings() {
+  const panel = document.getElementById('settings-panel');
+  panel.classList.toggle('open');
+  document.getElementById('tog-arrow').innerHTML =
+    panel.classList.contains('open') ? '&#9650;' : '&#9660;';
+}
+
+function onWPMChange(v) {
+  S.wpm = v;
+  document.getElementById('wpm-lbl').textContent  = v;
+  document.getElementById('wpm-live').textContent = v + ' WPM';
+}
+
+function onFontSizeChange(v) {
+  S.fontSize = v;
+  document.getElementById('fs-lbl').textContent = v + 'px';
+  const box = document.getElementById('word-box');
+  box.style.fontSize = v + 'px';
+  box.style.height   = (v * 2.4) + 'px';
+}
+
+function onAlignmentChange() {
+  S.alignment = document.getElementById('alignment').value;
+  if (words.length) renderWord();
+}
+
+function onHighlightChange() {
+  S.highlightOrp = document.getElementById('highlight-orp').checked;
+  if (words.length) renderWord();
+}
+
+function onComplexityChange(v) {
+  S.complexityFactor = v;
+  document.getElementById('cx-lbl').textContent = v.toFixed(2);
+}
+
+function onProperChange(v) {
+  S.properFactor = v;
+  document.getElementById('pn-lbl').textContent = v.toFixed(2);
+}
+
+function onColorsChange() {
+  S.bgColor = document.getElementById('bg-color').value;
+  S.fgColor = document.getElementById('fg-color').value;
+  applyColors();
+}
+
+function onOrpColorChange() {
+  S.orpColor = document.getElementById('orp-color').value;
+  document.documentElement.style.setProperty('--accent', S.orpColor);
+  if (words.length) renderWord();
+}
+
+function applyColors() {
+  const r = document.documentElement;
+  r.style.setProperty('--bg', S.bgColor);
+  r.style.setProperty('--fg', S.fgColor);
+  r.style.setProperty('--panel',  hexShift(S.bgColor, -14));
+  r.style.setProperty('--border', hexShift(S.bgColor, -38));
+  r.style.setProperty('--btn',    hexShift(S.bgColor, -22));
+}
+
+function applyTheme(name) {
+  const t = { light:  ['#ffffff','#111111'],
+               dark:   ['#15202b','#e8e8e8'],
+               sepia:  ['#f5edd6','#3b2a18'] }[name];
+  S.bgColor = t[0]; S.fgColor = t[1];
+  document.getElementById('bg-color').value = t[0];
+  document.getElementById('fg-color').value = t[1];
+  applyColors();
+}
+
+function hexShift(hex, d) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
+  return '#' + [0,2,4].map(i => {
+    const v = Math.max(0, Math.min(255, parseInt(hex.slice(i,i+2),16) + d));
+    return v.toString(16).padStart(2,'0');
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+// Keyboard shortcuts
+// ─────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  switch (e.key) {
+    case ' ':        e.preventDefault(); togglePlay();  break;
+    case 'ArrowLeft':  e.preventDefault(); stepBy(-1);  break;
+    case 'ArrowRight': e.preventDefault(); stepBy(1);   break;
+    case 'ArrowUp':    e.preventDefault(); stepBy(-10); break;
+    case 'ArrowDown':  e.preventDefault(); stepBy(10);  break;
+    case 'r': case 'R': resetToStart(); break;
+  }
+});
+
+// ─────────────────────────────────────────────
+// Init — sync S from DOM (handles browser-restored slider positions on refresh)
+// ─────────────────────────────────────────────
+(function initFromDOM() {
+  const g = id => document.getElementById(id);
+
+  const wpm = +g('wpm').value;
+  S.wpm = wpm;
+  g('wpm-lbl').textContent  = wpm;
+  g('wpm-live').textContent = wpm + ' WPM';
+
+  const fs = +g('font-size').value;
+  S.fontSize = fs;
+  g('fs-lbl').textContent = fs + 'px';
+  g('word-box').style.fontSize = fs + 'px';
+  g('word-box').style.height   = (fs * 2.4) + 'px';
+
+  S.alignment    = g('alignment').value;
+  S.highlightOrp = g('highlight-orp').checked;
+
+  const cx = +g('complexity').value;
+  S.complexityFactor = cx;
+  g('cx-lbl').textContent = cx.toFixed(2);
+
+  const pn = +g('proper-delay').value;
+  S.properFactor = pn;
+  g('pn-lbl').textContent = pn.toFixed(2);
+
+  S.bgColor  = g('bg-color').value;
+  S.fgColor  = g('fg-color').value;
+  S.orpColor = g('orp-color').value;
+  applyColors();
+  document.documentElement.style.setProperty('--accent', S.orpColor);
+})();
+
+restoreSession();
+</script>
+</body>
+</html>
